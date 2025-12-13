@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+// Use relative URL for API routes (Next.js API routes)
+const API_URL = '';
 
 interface AnalysisResult {
   success: boolean;
