@@ -1,8 +1,7 @@
 import dotenv from 'dotenv';
-// Load env FIRST before anything else
 dotenv.config();
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import logger from '../../utils/logger';
 
 interface DrawingSpecs {
@@ -41,15 +40,11 @@ interface CostEstimate {
   reasoning?: string;
 }
 
-// Simple API key - hardcoded fallback for reliability
+// Initialize - exact same as your Vue.js project
 const API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyA1-bXOdeOrO8yS6UNd5nck2vS3M7BI7lo';
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-pro-vision';
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-// Initialize once
-const genAI = new GoogleGenerativeAI(API_KEY);
-const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
-logger.info(`Gemini initialized with model: ${MODEL_NAME}`);
+logger.info('Gemini initialized with @google/genai SDK');
 
 export async function analyzeDrawing(imageBuffer: Buffer): Promise<GeminiAnalysisResult> {
   try {
@@ -87,37 +82,66 @@ Important:
 - Identify material type from notes or material callouts
 - List all manufacturing processes implied (cutting, bending, welding, etc.)
 - Set confidence based on image clarity and completeness
-- Return ONLY valid JSON, no markdown formatting`;
+- Return ONLY valid JSON`;
 
-    const imagePart = {
-      inlineData: {
-        data: imageBuffer.toString('base64'),
-        mimeType: 'image/jpeg',
-      },
-    };
+    const base64Data = imageBuffer.toString('base64');
 
+    // Use exact same API as your Vue.js project
     logger.info('Sending request to Gemini API...');
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
-    const text = response.text();
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: base64Data,
+            },
+          },
+          { text: prompt },
+        ],
+      },
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            dimensions: {
+              type: Type.OBJECT,
+              properties: {
+                length: { type: Type.NUMBER },
+                width: { type: Type.NUMBER },
+                height: { type: Type.NUMBER },
+                thickness: { type: Type.NUMBER },
+                diameter: { type: Type.NUMBER },
+                unit: { type: Type.STRING },
+              },
+            },
+            material: {
+              type: Type.OBJECT,
+              properties: {
+                type: { type: Type.STRING },
+                grade: { type: Type.STRING },
+                specifications: { type: Type.STRING },
+                confidence: { type: Type.NUMBER },
+              },
+            },
+            quantity: { type: Type.INTEGER },
+            surfaceFinish: { type: Type.STRING },
+            tolerances: { type: Type.ARRAY, items: { type: Type.STRING } },
+            manufacturingProcess: { type: Type.ARRAY, items: { type: Type.STRING } },
+            overallConfidence: { type: Type.NUMBER },
+          },
+        },
+      },
+    });
 
-    logger.info('Received response from Gemini API');
-
-    // Clean and parse JSON
-    let jsonText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-    // Handle potential markdown code blocks
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
-    }
-
-    logger.info('Parsing Gemini response...');
+    const jsonText = response.text;
     const parsed = JSON.parse(jsonText);
 
     logger.info('Gemini Vision analysis completed successfully', {
       confidence: parsed.overallConfidence,
       material: parsed.material?.type,
-      hasQuantity: !!parsed.quantity,
     });
 
     return {
@@ -137,7 +161,9 @@ Important:
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    throw new Error(`Failed to analyze drawing with Gemini: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to analyze drawing with Gemini: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
@@ -146,66 +172,76 @@ export async function estimateCost(
   historicalData: any[] = []
 ): Promise<CostEstimate> {
   try {
-    logger.info('Starting Gemini cost estimation...', {
-      material: specs.material.type,
-      quantity: specs.quantity,
-    });
+    logger.info('Starting Gemini cost estimation...');
 
     const prompt = `You are a manufacturing cost estimation expert.
 
-Given the following specifications and historical data, estimate the manufacturing cost:
+Given the following specifications, estimate the manufacturing cost:
 
-CURRENT PROJECT:
 ${JSON.stringify(specs, null, 2)}
-
-SIMILAR HISTORICAL PROJECTS:
-${historicalData.length > 0 ? JSON.stringify(historicalData.slice(0, 5), null, 2) : 'No historical data available'}
 
 Provide a detailed cost estimate in JSON format:
 {
   "material": {
-    "unitPrice": <price per unit in JPY>,
-    "totalCost": <total material cost>,
-    "reasoning": "<explanation>"
+    "totalCost": <total material cost in JPY>
   },
   "labor": {
-    "estimatedHours": <hours>,
-    "hourlyRate": <JPY per hour>,
-    "totalCost": <total labor cost>,
-    "reasoning": "<explanation>"
+    "totalCost": <total labor cost in JPY>
   },
   "overhead": {
-    "percentage": <overhead % of material+labor>,
-    "amount": <overhead cost>
+    "amount": <overhead cost in JPY>
   },
   "total": {
-    "cost": <total manufacturing cost>,
-    "recommendedPrice": <suggested selling price>,
-    "margin": <profit margin %>
+    "cost": <total manufacturing cost in JPY>
   },
   "confidence": <0.0 to 1.0>,
-  "reasoning": "<overall explanation>",
-  "riskFactors": ["<risk 1>", "<risk 2>"]
-}
+  "reasoning": "<explanation>"
+}`;
 
-Return ONLY valid JSON.`;
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [{ text: prompt }],
+      },
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            material: {
+              type: Type.OBJECT,
+              properties: {
+                totalCost: { type: Type.NUMBER },
+              },
+            },
+            labor: {
+              type: Type.OBJECT,
+              properties: {
+                totalCost: { type: Type.NUMBER },
+              },
+            },
+            overhead: {
+              type: Type.OBJECT,
+              properties: {
+                amount: { type: Type.NUMBER },
+              },
+            },
+            total: {
+              type: Type.OBJECT,
+              properties: {
+                cost: { type: Type.NUMBER },
+              },
+            },
+            confidence: { type: Type.NUMBER },
+            reasoning: { type: Type.STRING },
+          },
+        },
+      },
+    });
 
-    logger.info('Sending cost estimation request to Gemini API...');
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const cost = JSON.parse(response.text);
 
-    // Clean and parse JSON
-    let jsonText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-
-    if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
-    }
-
-    logger.info('Parsing cost estimation response...');
-    const cost = JSON.parse(jsonText);
-
-    logger.info('Gemini cost estimation completed successfully', {
+    logger.info('Gemini cost estimation completed', {
       total: cost.total.cost,
       confidence: cost.confidence,
     });
@@ -221,18 +257,23 @@ Return ONLY valid JSON.`;
   } catch (error) {
     logger.error('Gemini cost estimation error:', {
       error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
     });
-    throw new Error(`Failed to estimate cost with Gemini: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to estimate cost with Gemini: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
 export async function testConnection(): Promise<boolean> {
   try {
     logger.info('Testing Gemini API connection...');
-    const result = await model.generateContent('Hello, please respond with "OK"');
-    const response = await result.response;
-    const text = response.text();
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [{ text: 'Say "OK"' }],
+      },
+    });
+    const text = response.text;
     logger.info('Gemini API connection test successful', { response: text });
     return true;
   } catch (error) {
