@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
-import geminiVision from '../services/ai/gemini-vision.service';
+import * as geminiVision from '../services/ai/gemini-vision.service';
 import logger from '../utils/logger';
 import path from 'path';
 import fs from 'fs/promises';
