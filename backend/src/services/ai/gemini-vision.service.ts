@@ -43,7 +43,7 @@ interface CostEstimate {
 
 // Simple API key - hardcoded fallback for reliability
 const API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyA1-bXOdeOrO8yS6UNd5nck2vS3M7BI7lo';
-const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+const MODEL_NAME = process.env.GEMINI_MODEL || 'gemini-pro-vision';
 
 // Initialize once
 const genAI = new GoogleGenerativeAI(API_KEY);
