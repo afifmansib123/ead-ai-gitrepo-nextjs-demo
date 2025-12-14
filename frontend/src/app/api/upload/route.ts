@@ -29,9 +29,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const file = formData.get('drawing') as File;
+    const file = formData.get('drawing');
 
-    if (!file) {
+    // Better validation for file object
+    if (!file || !(file instanceof File)) {
       return NextResponse.json(
         {
           success: false,
@@ -43,7 +44,8 @@ export async function POST(request: NextRequest) {
 
     // Validate file type
     const allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
-    if (!allowedMimes.includes(file.type)) {
+    const fileType = file.type || '';
+    if (!allowedMimes.includes(fileType)) {
       return NextResponse.json(
         {
           success: false,
@@ -54,7 +56,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate file size (10MB)
-    if (file.size > 10 * 1024 * 1024) {
+    const fileSize = file.size || 0;
+    if (fileSize > 10 * 1024 * 1024) {
       return NextResponse.json(
         {
           success: false,
@@ -65,9 +68,9 @@ export async function POST(request: NextRequest) {
     }
 
     logger.info('File upload received', {
-      filename: file.name,
-      size: file.size,
-      mimetype: file.type,
+      filename: file.name || 'unknown',
+      size: fileSize,
+      mimetype: fileType,
     });
 
     // Convert file to buffer
